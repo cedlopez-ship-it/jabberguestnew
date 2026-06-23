@@ -39,7 +39,7 @@
 
     .page {
       width: min(100%, 840px);
-      margin-bottom: 60px; /* Espacio para que el widget flotante no tape contenido */
+      margin-bottom: 60px;
     }
 
     .hero-card {
@@ -363,7 +363,6 @@
   <script src="./js/app.js"></script>
   <script src="./sdk/calling-sdk.js"></script>
   <script>
-    // Iniciar SDKs de Webex al cargar la página
     window.addEventListener('load', function () {
       if (typeof prepareClickToCall === 'function') { prepareClickToCall(); }
       if (typeof initCalling === 'function') { initCalling('customer'); }
