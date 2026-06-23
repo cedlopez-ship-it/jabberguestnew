@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es')">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -69,8 +69,17 @@
       -webkit-text-fill-color: transparent;
     }
 
+    /* --- CONTENEDOR Y BOTONES DE CONTROL DE LLAMADA --- */
+    .actions-container {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+    }
+
     .call-support-btn {
-      min-width: 240px;
+      min-width: 220px;
       border: 0;
       border-radius: 12px;
       padding: 16px 32px;
@@ -81,6 +90,10 @@
       background: var(--accent);
       box-shadow: 0 10px 25px var(--accent-shadow);
       transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
 
     .call-support-btn:hover:not(:disabled),
@@ -90,12 +103,34 @@
       box-shadow: 0 15px 30px var(--accent-shadow);
     }
 
+    /* Estilo secundario traslúcido para apagar video */
+    .call-support-btn.secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+      box-shadow: none;
+    }
+
+    .call-support-btn.secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.12);
+      transform: translateY(-2px);
+    }
+
+    /* Estado de video muteado (Rojo dinámico) */
+    .call-support-btn.video-muted {
+      background: var(--danger);
+      color: #ffffff;
+      border-color: transparent;
+      box-shadow: 0 10px 20px rgba(239, 68, 68, 0.25);
+    }
+
     .call-support-btn:disabled {
       cursor: not-allowed;
       opacity: 0.4;
       box-shadow: none;
       background: #475569;
       color: #94a3b8;
+      border: none;
     }
 
     /* --- VIDEO TILES MODERNOS --- */
@@ -305,7 +340,10 @@
     <section class="hero-card" aria-label="Webex Click to Call">
       <h1>Unidos por la colaboración</h1>
       
-      <button id="clickToCallBtn" class="call-support-btn" type="button" onclick="initiateCall()" disabled>Click to Call</button>
+      <div class="actions-container">
+        <button id="clickToCallBtn" class="call-support-btn" type="button" onclick="initiateCall()" disabled>Click to Call</button>
+        <button id="toggleVideoBtn" class="call-support-btn secondary" type="button" onclick="toggleVideoTrack()" disabled>🎥 Apagar Video</button>
+      </div>
 
       <div class="video-panel" aria-label="Video de la llamada">
         <div class="video-box">
