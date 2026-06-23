@@ -65,6 +65,7 @@
       letter-spacing: -0.03em;
       background: linear-gradient(to right, #ffffff, #94a3b8);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -437,10 +438,37 @@
   <script src="./js/app.js"></script>
   <script src="./sdk/calling-sdk.js"></script>
   <script>
-    window.addEventListener('load', function () {
-      if (typeof prepareClickToCall === 'function') { prepareClickToCall(); }
-      if (typeof initCalling === 'function') { initCalling('customer'); }
-    });
-  </script>
+  // Iniciar SDKs de Webex al cargar la página
+  window.addEventListener('load', function () {
+    if (typeof prepareClickToCall === 'function') { prepareClickToCall(); }
+    if (typeof initCalling === 'function') { initCalling('customer'); }
+
+    // Renderizar los textos iniciales de las variables de app.js si están disponibles
+    if (typeof service_app_client_id !== 'ghost' && document.getElementById('display-client-id')) {
+      document.getElementById('display-client-id').textContent = typeof service_app_client_id !== 'undefined' ? service_app_client_id : 'No definido';
+      document.getElementById('display-called-number').textContent = typeof CLICK_TO_CALL_CALLED_NUMBER !== 'undefined' ? CLICK_TO_CALL_CALLED_NUMBER : 'No definido';
+    }
+  });
+
+  // Función interactiva del ojo para ocultar/mostrar secretos
+  function toggleSecret(elementId, variableType) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    const isHidden = element.getAttribute('data-hidden') === 'true';
+
+    if (isHidden) {
+      let realValue = '';
+      if (variableType === 'token') realValue = typeof service_app_token !== 'undefined' ? service_app_token : '';
+      if (variableType === 'refresh') realValue = typeof service_app_refresh_token !== 'undefined' ? service_app_refresh_token : '';
+      if (variableType === 'secret') realValue = typeof service_app_client_secret !== 'undefined' ? service_app_client_secret : '';
+
+      element.textContent = realValue || 'Vacío';
+      element.setAttribute('data-hidden', 'false');
+    } else {
+      element.textContent = '••••••••••••';
+      element.setAttribute('data-hidden', 'true');
+    }
+  }
+</script>
 </body>
 </html>
