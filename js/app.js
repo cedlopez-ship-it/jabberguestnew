@@ -20,8 +20,8 @@ const service_app_client_secret = '13038ce0b0933ee18a7c1b50426fdf2ee5d929be60893
 const CLICK_TO_CALL_CALLED_NUMBER = '8800'; // Destino (extensión, número o URI)
 
 // Variables de Estado de la Llamada y Video
-let isVideoMuted = false;
-let globalActiveCall = null; // Almacenará la llamada activa de forma global
+let isVideoMuted = true;      // Cambiado a true porque ahora inicia silenciado por defecto
+let globalActiveCall = null;  // Almacenará la llamada activa de forma global
 
 function getClickToCallConfig() {
   return {
@@ -174,6 +174,7 @@ async function getWebexConfig() {
   };
 }
 
+// CAMBIO CRÍTICO: Configuración de inicio con video deshabilitado por defecto
 async function getCallingConfig() {
   const config = getClickToCallConfig();
   const jweToken = await getJweToken();
@@ -181,7 +182,7 @@ async function getCallingConfig() {
   return {
     clientConfig: {
       calling: true,
-      video: true,
+      video: false, // <--- CAMBIADO A FALSE: Llama exclusivamente con AUDIO al iniciar
       callHistory: false,
     },
     callingClientConfig: {
@@ -199,19 +200,24 @@ async function getCallingConfig() {
 
 // --- INTERCEPCIÓN Y CONTROL DEL FLUJO DE LLAMADA ---
 
-// Sincronizar el estado del botón de video cuando la llamada entra o se conecta con éxito
+// Sincronizar el estado del botón cuando la llamada conecta en modo Audio
 function enableVideoControls(callInstance) {
   globalActiveCall = callInstance;
+  isVideoMuted = true; // Forzar estado inicial silenciado ya que iniciamos sin video
+  
   const toggleVideoBtn = document.getElementById('toggleVideoBtn');
   if (toggleVideoBtn) {
     toggleVideoBtn.removeAttribute('disabled');
+    toggleVideoBtn.classList.add('video-muted');   // Pone el botón en rojo
+    toggleVideoBtn.innerHTML = '🎥 Encender Video'; // Texto correcto para activarlo
   }
 }
 
-// Resetear los controles de video al terminar la llamada
+// Resetear el botón por completo al colgar la llamada
 function resetVideoControls() {
   globalActiveCall = null;
-  isVideoMuted = false;
+  isVideoMuted = true;
+  
   const toggleVideoBtn = document.getElementById('toggleVideoBtn');
   if (toggleVideoBtn) {
     toggleVideoBtn.setAttribute('disabled', 'true');
@@ -220,7 +226,7 @@ function resetVideoControls() {
   }
 }
 
-// Función interactiva para el botón HTML
+// Función interactiva del botón para alternar el video durante la llamada
 function toggleVideoTrack() {
   if (!globalActiveCall) {
     console.error("No hay ninguna llamada activa asignada para controlar el video.");
@@ -240,11 +246,11 @@ function toggleVideoTrack() {
     isVideoMuted = true;
     if (videoBtn) {
       videoBtn.classList.add('video-muted');
-      videoBtn.innerHTML = '❌ Video Apagado';
+      videoBtn.innerHTML = '🎥 Encender Video';
     }
-    console.log("Transmisión de video local pausada de forma remota.");
+    console.log("Transmisión de video local pausada.");
   } else {
-    // Escenario B: Activar Video de nuevo
+    // Escenario B: Activar Video (Encender la cámara en llamada en curso)
     if (typeof globalActiveCall.unmuteVideo === 'function') {
       globalActiveCall.unmuteVideo();
     } else if (globalActiveCall.localStream) {
@@ -256,18 +262,19 @@ function toggleVideoTrack() {
       videoBtn.classList.remove('video-muted');
       videoBtn.innerHTML = '🎥 Apagar Video';
     }
-    console.log("Transmisión de video local restaurada.");
+    console.log("Transmisión de video local iniciada con éxito.");
   }
 }
 
-// Enlazar con las funciones del ciclo de vida del script principal/SDK (Inyección Segura)
+// Enlazar con las funciones del ciclo de vida de calling-sdk.js (Inyección Dinámica)
 window.addEventListener('load', () => {
-  // Capturar dinámicamente cuando se inicie una llamada en el SDK para rastrearla
+  // Capturar dinámicamente cuando se inicie una llamada en el SDK para registrar el objeto
   if (typeof initiateCall === 'function') {
     const originalInitiateCall = initiateCall;
     window.initiateCall = async function(...args) {
       const result = await originalInitiateCall(...args);
-      // Intentar buscar la referencia de la llamada de Webex en ejecución
+      
+      // Esperar un breve instante a que el SDK asigne el objeto de llamada a las variables globales
       setTimeout(() => {
         const activeCallRef = typeof activeCall !== 'undefined' ? activeCall : (typeof currentCall !== 'undefined' ? currentCall : null);
         if (activeCallRef) { 
@@ -279,7 +286,7 @@ window.addEventListener('load', () => {
     };
   }
 
-  // Capturar dinámicamente el colgado de llamadas
+  // Capturar dinámicamente el colgado de llamadas para limpiar el estado del botón
   if (typeof disconnectCall === 'function') {
     const originalDisconnectCall = disconnectCall;
     window.disconnectCall = function(...args) {
