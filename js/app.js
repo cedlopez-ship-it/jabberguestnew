@@ -14,363 +14,137 @@
 */
 let service_app_token = 'NTRjNTBjZGEtOGM5ZC00NjVjLWIzNDctOTZmZWIzOGZkYzA5ZjFjN2U5MzAtMDRk_P0A1_13ab0633-3ac9-4201-86fb-b00be6f71b9c';
 let service_app_refresh_token = 'RDZkM2U0YmMtMzgxOS00YmUwLTk4MTYtNWY1NzAzMzc5MWUzOTg4ZWY3NjgtMjM2_P0A1_13ab0633-3ac9-4201-86fb-b00be6f71b9c';
-const service_app_client_id = 'Ca54f9127b200556fec167b0fd96db5cad625d20ba3de510d40ad6718af6699c8';
-const service_app_client_secret = 'c6af6c268a29b72348c18361f205e22086406cd4a97de8e45c0c9d3969fdd671';
-const CLICK_TO_CALL_CALLED_NUMBER = '8800';
-const CLICK_TO_CALL_GUEST_NAME = 'Unidos por la colaboración';
-const WEBEX_DISCOVERY_REGION = 'US-EAST';
-const WEBEX_DISCOVERY_COUNTRY = 'US';
+const service_app_client_id = 'C01323ca7946927d3101b0f5573426e6d18bd9db26c71f3b3989c629fb8f66874';
+const service_app_client_secret = '13038ce0b0933ee18a7c1b50426fdf2ee5d929be608931ebc1b0db7a72d422a5';
 
-let callNotification;
+const CLICK_TO_CALL_CALLED_NUMBER = '8800'; // Destino (extensión, número o URI)
 
-class SimpleCallTimer {
-  constructor(timerElement) {
-    this.timerElement = timerElement;
-    this.intervalId = null;
-    this.elapsedSeconds = 0;
-  }
-
-  start() {
-    this.stop();
-    this.elapsedSeconds = 0;
-    this.render();
-    this.intervalId = window.setInterval(() => {
-      this.elapsedSeconds += 1;
-      this.render();
-    }, 1000);
-  }
-
-  stop() {
-    if (this.intervalId) {
-      window.clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-    this.elapsedSeconds = 0;
-    this.render();
-  }
-
-  render() {
-    if (!this.timerElement) return;
-    const minutes = String(Math.floor(this.elapsedSeconds / 60)).padStart(2, '0');
-    const seconds = String(this.elapsedSeconds % 60).padStart(2, '0');
-    this.timerElement.textContent = `${minutes}:${seconds}`;
-  }
-}
-
-class CallNotificationElement {
-  constructor(element, timerElement) {
-    this.callNotification = element;
-    this.callNotificationTimer = new SimpleCallTimer(timerElement);
-  }
-
-  toggle(action) {
-    if (!this.callNotification) return this.callNotificationTimer;
-    if (action === 'close' || this.callNotification.classList.contains('show-notification')) {
-      this.callNotification.classList.remove('show-notification');
-      this.callNotificationTimer.stop();
-    } else {
-      this.callNotification.classList.add('show-notification');
-    }
-    return this.callNotificationTimer;
-  }
-
-  startTimer() {
-    if (!this.callNotification) return this.callNotificationTimer;
-    this.callNotification.classList.add('timestate', 'show-notification');
-    this.callNotificationTimer.start();
-    return this.callNotificationTimer;
-  }
-}
-
-const callNotificationElem = document.getElementById('callNotification');
-const callTimer = document.querySelector('#callNotification #timer');
-const profileOnline = document.querySelector('.dropbtn #availability');
-
-if (callNotificationElem) {
-  callNotification = new CallNotificationElement(callNotificationElem, callTimer);
-}
-
-
-const WEBEX_TOKEN_STORAGE_KEY = 'webex_click_to_call_service_app_tokens';
-
-function getStoredServiceAppTokens() {
-  try {
-    const stored = window.localStorage.getItem(WEBEX_TOKEN_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch (error) {
-    console.warn('[Click to Call] No se pudo leer localStorage:', error);
-    return {};
-  }
-}
-
-function saveStoredServiceAppTokens(tokens) {
-  try {
-    const current = getStoredServiceAppTokens();
-    window.localStorage.setItem(WEBEX_TOKEN_STORAGE_KEY, JSON.stringify({
-      ...current,
-      ...tokens,
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch (error) {
-    console.warn('[Click to Call] No se pudo guardar tokens en localStorage:', error);
-  }
-}
-
-function getStoredServiceAppAccessToken() {
-  const stored = getStoredServiceAppTokens();
-  return stored.accessToken || service_app_token;
-}
-
-function getStoredServiceAppRefreshToken() {
-  const stored = getStoredServiceAppTokens();
-  return stored.refreshToken || service_app_refresh_token;
-}
-
-function updateInMemoryServiceAppTokens({ accessToken, refreshToken }) {
-  if (accessToken) service_app_token = accessToken;
-  if (refreshToken) service_app_refresh_token = refreshToken;
-  saveStoredServiceAppTokens({
-    accessToken: accessToken || service_app_token,
-    refreshToken: refreshToken || service_app_refresh_token,
-  });
-}
-
-function maskToken(token) {
-  if (!token) return 'vacío';
-  if (token.length <= 12) return `${token.slice(0, 4)}...`;
-  return `${token.slice(0, 6)}...${token.slice(-6)}`;
-}
-
-async function refreshServiceAppAccessToken() {
-  const config = getClickToCallConfig();
-  if (!config.refreshToken) {
-    throw new Error('No hay service_app_refresh_token configurado para renovar el access token.');
-  }
-  if (!config.clientId || !config.clientSecret) {
-    throw new Error('Para renovar el access token configura service_app_client_id y service_app_client_secret.');
-  }
-
-  updateAuthIndicator({ config: 'ok', auth: 'working', line: 'pending', message: 'Renovando access token con refresh token.' });
-
-  const body = new URLSearchParams();
-  body.set('grant_type', 'refresh_token');
-  body.set('client_id', config.clientId);
-  body.set('client_secret', config.clientSecret);
-  body.set('refresh_token', config.refreshToken);
-
-  const response = await fetch('https://webexapis.com/v1/access_token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body,
-  });
-
-  const data = await readJsonResponse(response);
-  if (!response.ok || !data.access_token) {
-    throw new Error(`No se pudo renovar el access token (${response.status}): ${JSON.stringify(data)}`);
-  }
-
-  updateInMemoryServiceAppTokens({
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token || config.refreshToken,
-  });
-
-  logClickToCall('Access token renovado', {
-    accessToken: maskToken(data.access_token),
-    refreshToken: maskToken(data.refresh_token || config.refreshToken),
-    expiresIn: data.expires_in,
-  });
-
-  updateAuthIndicator({ config: 'ok', auth: 'ok', line: 'pending', message: 'Access token renovado.' });
-  return data.access_token;
-}
-
-async function fetchWithServiceAppAuth(url, options = {}, retryOnUnauthorized = true) {
-  let token = getStoredServiceAppAccessToken();
-
-  if (!token && getStoredServiceAppRefreshToken()) {
-    token = await refreshServiceAppAccessToken();
-  }
-
-  const headers = new Headers(options.headers || {});
-  headers.set('Authorization', `Bearer ${token}`);
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  if ((response.status === 401 || response.status === 403) && retryOnUnauthorized && getStoredServiceAppRefreshToken()) {
-    const errorBody = await readJsonResponse(response);
-    logClickToCall(`Access token rechazado (${response.status}). Intentando renovar.`, errorBody);
-    const freshToken = await refreshServiceAppAccessToken();
-    const retryHeaders = new Headers(options.headers || {});
-    retryHeaders.set('Authorization', `Bearer ${freshToken}`);
-    return fetch(url, {
-      ...options,
-      headers: retryHeaders,
-    });
-  }
-
-  return response;
-}
+// Variables de Estado de la Llamada y Video
+let isVideoMuted = false;
+let globalActiveCall = null; // Almacenará la llamada activa de forma global
 
 function getClickToCallConfig() {
   return {
-    serviceAppToken: getStoredServiceAppAccessToken(),
-    refreshToken: getStoredServiceAppRefreshToken(),
-    clientId: service_app_client_id,
-    clientSecret: service_app_client_secret,
     calledNumber: CLICK_TO_CALL_CALLED_NUMBER,
-    guestName: CLICK_TO_CALL_GUEST_NAME,
-    region: WEBEX_DISCOVERY_REGION,
-    country: WEBEX_DISCOVERY_COUNTRY,
+    region: 'us-east-1',
+    country: 'US'
   };
 }
 
-function logClickToCall(message, data) {
-  if (data !== undefined) {
-    console.log(`[Click to Call] ${message}`, data);
-  } else {
-    console.log(`[Click to Call] ${message}`);
+function updateAuthIndicator({ config, auth, line, message }) {
+  console.log(`[Status Update] Config: ${config}, Auth: ${auth}, Line: ${line} | ${message}`);
+  
+  const configItem = document.getElementById('configStatusItem');
+  const authItem = document.getElementById('authStatusItem');
+  const lineItem = document.getElementById('lineStatusItem');
+  const msgEl = document.getElementById('clickToCallStatus');
+
+  const valConfig = document.getElementById('configStatusValue');
+  const valAuth = document.getElementById('authStatusValue');
+  const valLine = document.getElementById('lineStatusValue');
+
+  if (configItem && valConfig) {
+    configItem.setAttribute('data-state', config);
+    valConfig.textContent = config === 'ok' ? 'Listo' : (config === 'error' ? 'Error' : 'Pendiente');
+  }
+  if (authItem && valAuth) {
+    authItem.setAttribute('data-state', auth);
+    valAuth.textContent = auth === 'ok' ? 'Conectado' : (auth === 'error' ? 'Error' : 'Pendiente');
+  }
+  if (lineItem && valLine) {
+    lineItem.setAttribute('data-state', line);
+    valLine.textContent = line === 'ok' ? 'Activa' : (line === 'error' ? 'Error' : 'Pendiente');
+  }
+  if (msgEl) {
+    msgEl.textContent = message || '';
   }
 }
 
-function setStatusText(id, text) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
-}
-
-function setStatusState(id, state) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.dataset.state = state;
-}
-
-function setClickToCallStatus(message) {
-  const statusElement = document.getElementById('clickToCallStatus');
-  if (statusElement) statusElement.textContent = message || '';
-  logClickToCall(message || '');
-}
-
-function updateAuthIndicator({ config = 'pending', auth = 'pending', line = 'pending', message = '' } = {}) {
-  const labels = {
-    pending: 'Pendiente',
-    working: 'En progreso',
-    ok: 'OK',
-    error: 'Error',
-  };
-
-  setStatusText('configStatusValue', labels[config] || config);
-  setStatusState('configStatusItem', config);
-  setStatusText('authStatusValue', labels[auth] || auth);
-  setStatusState('authStatusItem', auth);
-  setStatusText('lineStatusValue', labels[line] || line);
-  setStatusState('lineStatusItem', line);
-
-  if (message) setClickToCallStatus(message);
-}
-
-function validateClickToCallConfig() {
-  const config = getClickToCallConfig();
-  const missing = [];
-  if (!config.serviceAppToken && !config.refreshToken) missing.push('service_app_token o service_app_refresh_token');
-  if (config.refreshToken && !config.clientId) missing.push('service_app_client_id');
-  if (config.refreshToken && !config.clientSecret) missing.push('service_app_client_secret');
-  if (!config.calledNumber) missing.push('CLICK_TO_CALL_CALLED_NUMBER');
-  return missing;
-}
-
-function setClickToCallButtonReady(isReady, statusMessage) {
-  const button = document.getElementById('clickToCallBtn') || document.querySelector('.call-support-btn');
-  if (button) {
-    button.disabled = !isReady;
-    button.setAttribute('aria-busy', isReady ? 'false' : 'true');
-  }
-  if (statusMessage) setClickToCallStatus(statusMessage);
-}
-
-function prepareClickToCall() {
-  const missing = validateClickToCallConfig();
-  if (missing.length > 0) {
-    updateAuthIndicator({
-      config: 'error',
-      auth: 'pending',
-      line: 'pending',
-      message: `Falta configurar: ${missing.join(', ')}`,
-    });
-    setClickToCallButtonReady(false);
-    return;
-  }
-
-  updateAuthIndicator({
-    config: 'ok',
-    auth: 'pending',
-    line: 'pending',
-    message: 'Configuración lista. Inicializando Webex Calling...',
+async function handleTokenRefresh() {
+  console.log('Intentando refrescar el token de la Service App...');
+  const url = 'https://webexapis.com/v1/oauth2/token';
+  const payload = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: service_app_refresh_token,
+    client_id: service_app_client_id,
+    client_secret: service_app_client_secret
   });
-  setClickToCallButtonReady(false);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: payload
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error en refresco de token: ${response.status}`);
+    }
+
+    const data = await response.json();
+    service_app_token = data.access_token;
+    if (data.refresh_token) {
+      service_app_refresh_token = data.refresh_token;
+    }
+    console.log('Token de Service App refrescado exitosamente.');
+    return true;
+  } catch (error) {
+    console.error('Fallo crítico al refrescar el token:', error);
+    updateAuthIndicator({ config: 'error', auth: 'error', line: 'pending', message: 'Credenciales inválidas o expiradas.' });
+    return false;
+  }
 }
 
-async function readJsonResponse(response) {
-  const text = await response.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch (error) {
-    return { raw: text };
+async function webexFetch(url, options = {}) {
+  if (!options.headers) options.headers = {};
+  options.headers['Authorization'] = `Bearer ${service_app_token}`;
+
+  let response = await fetch(url, options);
+
+  if (response.status === 401) {
+    console.warn('Token de Service App posiblemente expirado (401). Refrescando...');
+    const refreshed = await handleTokenRefresh();
+    if (refreshed) {
+      options.headers['Authorization'] = `Bearer ${service_app_token}`;
+      response = await fetch(url, options);
+    }
   }
+  return response;
 }
 
 async function getGuestToken() {
-  const config = getClickToCallConfig();
-  if (!config.serviceAppToken && !config.refreshToken) throw new Error('Configura service_app_token o service_app_refresh_token en js/app.js.');
-
-  updateAuthIndicator({ config: 'ok', auth: 'working', line: 'pending', message: 'Solicitando guest token.' });
-
-  const response = await fetchWithServiceAppAuth('https://webexapis.com/v1/guests/token', {
+  updateAuthIndicator({ config: 'working', auth: 'pending', line: 'pending', message: 'Creando sesión temporal de invitado...' });
+  
+  const url = 'https://webexapis.com/v1/guests/users';
+  const response = await webexFetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      subject: 'Webex Click To Call Demo',
-      displayName: config.guestName,
-    }),
-    redirect: 'follow',
+      displayName: 'Cliente de Soporte (' + Math.floor(1000 + Math.random() * 9000) + ')'
+    })
   });
 
-  const data = await readJsonResponse(response);
-  if (!response.ok || !data.accessToken) {
-    throw new Error(`No se pudo obtener el guest token (${response.status}): ${JSON.stringify(data)}`);
+  if (!response.ok) {
+    const errText = await response.text();
+    updateAuthIndicator({ config: 'error', auth: 'pending', line: 'pending', message: 'Error al generar invitado.' });
+    throw new Error(`No se pudo crear Guest User: ${errText}`);
   }
 
-  updateAuthIndicator({ config: 'ok', auth: 'ok', line: 'pending', message: 'Guest token obtenido.' });
-  return data.accessToken;
+  const data = await response.json();
+  return data.token;
 }
 
 async function getJweToken() {
-  const config = getClickToCallConfig();
-  if (!config.serviceAppToken && !config.refreshToken) throw new Error('Configura service_app_token o service_app_refresh_token en js/app.js.');
-  if (!config.calledNumber) throw new Error('Configura CLICK_TO_CALL_CALLED_NUMBER en js/app.js.');
+  updateAuthIndicator({ config: 'ok', auth: 'working', line: 'pending', message: 'Solicitando autorización para Click-to-Call...' });
 
-  updateAuthIndicator({ config: 'ok', auth: 'working', line: 'pending', message: 'Generando call token fresco.' });
+  const url = 'https://webexapis.com/v1/clickToCall/tokens';
+  const response = await webexFetch(url, { method: 'POST' });
 
-  const response = await fetchWithServiceAppAuth('https://webexapis.com/v1/telephony/click2call/callToken', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      calledNumber: config.calledNumber,
-      guestName: config.guestName,
-    }),
-    redirect: 'follow',
-  });
+  const data = await response.json();
 
-  const data = await readJsonResponse(response);
-  if (!response.ok || !data.callToken) {
-    throw new Error(`No se pudo obtener el call token (${response.status}): ${JSON.stringify(data)}`);
+  if (!response.ok) {
+    updateAuthIndicator({ config: 'ok', auth: 'error', line: 'pending', message: 'Permiso denegado por Webex.' });
+    throw new Error(`Error en clickToCall/tokens (${response.status}): ${JSON.stringify(data)}`);
   }
 
   updateAuthIndicator({ config: 'ok', auth: 'ok', line: 'pending', message: 'Call token fresco obtenido.' });
@@ -417,20 +191,100 @@ async function getCallingConfig() {
         country: config.country,
       },
       serviceData: {
-        indicator: 'guestcalling',
-        domain: '',
-        guestName: config.guestName,
+        indicator: jweToken,
       },
-      jwe: jweToken,
     },
-    logger: loggerConfig,
   };
 }
 
-function openCallNotification() {
-  if (callNotification) callNotification.toggle();
+// --- INTERCEPCIÓN Y CONTROL DEL FLUJO DE LLAMADA ---
+
+// Sincronizar el estado del botón de video cuando la llamada entra o se conecta con éxito
+function enableVideoControls(callInstance) {
+  globalActiveCall = callInstance;
+  const toggleVideoBtn = document.getElementById('toggleVideoBtn');
+  if (toggleVideoBtn) {
+    toggleVideoBtn.removeAttribute('disabled');
+  }
 }
 
-function updateAvailability() {
-  if (profileOnline) profileOnline.classList.add('online');
+// Resetear los controles de video al terminar la llamada
+function resetVideoControls() {
+  globalActiveCall = null;
+  isVideoMuted = false;
+  const toggleVideoBtn = document.getElementById('toggleVideoBtn');
+  if (toggleVideoBtn) {
+    toggleVideoBtn.setAttribute('disabled', 'true');
+    toggleVideoBtn.classList.remove('video-muted');
+    toggleVideoBtn.innerHTML = '🎥 Apagar Video';
+  }
 }
+
+// Función interactiva para el botón HTML
+function toggleVideoTrack() {
+  if (!globalActiveCall) {
+    console.error("No hay ninguna llamada activa asignada para controlar el video.");
+    return;
+  }
+
+  const videoBtn = document.getElementById('toggleVideoBtn');
+
+  if (!isVideoMuted) {
+    // Escenario A: Desactivar Video (Pasar a solo audio)
+    if (typeof globalActiveCall.muteVideo === 'function') {
+      globalActiveCall.muteVideo();
+    } else if (globalActiveCall.localStream) {
+      globalActiveCall.localStream.getVideoTracks().forEach(track => track.enabled = false);
+    }
+    
+    isVideoMuted = true;
+    if (videoBtn) {
+      videoBtn.classList.add('video-muted');
+      videoBtn.innerHTML = '❌ Video Apagado';
+    }
+    console.log("Transmisión de video local pausada de forma remota.");
+  } else {
+    // Escenario B: Activar Video de nuevo
+    if (typeof globalActiveCall.unmuteVideo === 'function') {
+      globalActiveCall.unmuteVideo();
+    } else if (globalActiveCall.localStream) {
+      globalActiveCall.localStream.getVideoTracks().forEach(track => track.enabled = true);
+    }
+    
+    isVideoMuted = false;
+    if (videoBtn) {
+      videoBtn.classList.remove('video-muted');
+      videoBtn.innerHTML = '🎥 Apagar Video';
+    }
+    console.log("Transmisión de video local restaurada.");
+  }
+}
+
+// Enlazar con las funciones del ciclo de vida del script principal/SDK (Inyección Segura)
+window.addEventListener('load', () => {
+  // Capturar dinámicamente cuando se inicie una llamada en el SDK para rastrearla
+  if (typeof initiateCall === 'function') {
+    const originalInitiateCall = initiateCall;
+    window.initiateCall = async function(...args) {
+      const result = await originalInitiateCall(...args);
+      // Intentar buscar la referencia de la llamada de Webex en ejecución
+      setTimeout(() => {
+        const activeCallRef = typeof activeCall !== 'undefined' ? activeCall : (typeof currentCall !== 'undefined' ? currentCall : null);
+        if (activeCallRef) { 
+          enableVideoControls(activeCallRef); 
+          activeCallRef.on('disconnected', resetVideoControls);
+        }
+      }, 1500);
+      return result;
+    };
+  }
+
+  // Capturar dinámicamente el colgado de llamadas
+  if (typeof disconnectCall === 'function') {
+    const originalDisconnectCall = disconnectCall;
+    window.disconnectCall = function(...args) {
+      resetVideoControls();
+      return originalDisconnectCall(...args);
+    };
+  }
+});
